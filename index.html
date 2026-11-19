@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lightpath</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+html, body { margin: 0; height: 100%; background: #04050A; overflow: hidden; }
+button { font-family: inherit; cursor: pointer; }
+button:disabled { cursor: default; }
+#stage { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; transform-origin: 0 0; overflow: hidden; background: #04050A; color: #E7E9F0; font-family: Inter, system-ui, sans-serif; user-select: none; }
+#stage.fade { animation: fade 0.45s ease; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.tool { position: relative; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; background: #10131D; border: 1px solid #262C3E; border-radius: 12px; touch-action: none; }
+.tool .count { position: absolute; right: 4px; top: 3px; font-size: 11px; font-weight: 600; color: #C8CDDA; }
+.icon-btn { width: 44px; height: 56px; display: flex; align-items: center; justify-content: center; background: transparent; color: #C8CDDA; border: 0; border-radius: 10px; }
+.divider { width: 1px; height: 40px; background: #262C3E; margin: 0 4px; }
+.dot { min-width: 40px; height: 40px; border-radius: 20px; border: 1px solid #2A3044; background: rgba(12,14,22,0.88); color: #C8CDDA; font: 500 13px 'JetBrains Mono', monospace; padding: 0; }
+.dot.pill { padding: 0 16px; font: 500 13px Inter, system-ui, sans-serif; }
+.dot[aria-current="true"] { background: #F1F2F6; color: #0A0C12; border-color: #F1F2F6; }
+.dot:disabled { opacity: 0.35; }
+#colorIn { width: 220px; accent-color: #F1F2F6; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="field" role="img" aria-label="Playfield: a star shining in every direction, the receiver, and the objects you have placed" style="position: absolute; left: 0; top: 0; width: 1440px; height: 900px; touch-action: none; display: block"></canvas>
+
+  <div style="position: absolute; left: 40px; top: 32px; width: 540px; display: flex; flex-direction: column; gap: 6px; pointer-events: none">
+    <div id="lvlLabel" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: 0.08em; color: #8C93A8"></div>
+    <h1 id="lvlName" style="margin: 0; font-size: 30px; font-weight: 600; line-height: 1.15; color: #F1F2F6"></h1>
+    <p id="goal" style="margin: 6px 0 0; font-size: 15px; line-height: 1.5; color: #C8CDDA"></p>
+    <label id="colorRow" style="display: none; margin: 6px 0 0; align-items: center; gap: 12px; font-size: 14px; color: #C8CDDA; pointer-events: auto">
+      <span>Star color</span>
+      <input id="colorIn" type="range" min="380" max="780" step="5">
+      <span id="colorVal" style="font-family: 'JetBrains Mono', monospace; font-size: 13px"></span>
+    </label>
+    <p id="tip" style="margin: 0; font-size: 13px; line-height: 1.5; color: #8C93A8"></p>
+    <p id="status" style="margin: 10px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.5; color: #9AA1B5"></p>
+  </div>
+
+  <nav id="dots" aria-label="Levels" style="position: absolute; right: 40px; top: 32px; display: flex; gap: 8px"></nav>
+
+  <div id="solved" role="status" style="position: absolute; left: 50%; top: 32px; transform: translateX(-50%); display: none; align-items: center; gap: 12px; padding: 6px 6px 6px 14px; border-radius: 999px; background: #F1F2F6; color: #0A0C12; font-size: 15px; font-weight: 600">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+    <span id="solvedText">Level complete</span>
+    <button id="next" type="button" style="height: 44px; padding: 0 20px; border-radius: 999px; border: 0; background: #0A0C12; color: #F1F2F6; font-size: 14px; font-weight: 600">Next level →</button>
+  </div>
+
+  <div id="bar" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 16px; background: rgba(12,14,22,0.88); border: 1px solid #1F2433">
+    <button id="tool-moon" class="tool" type="button" aria-label="Moon: reflects light. Drag onto the field." title="Moon: reflects light">
+      <span style="width: 24px; height: 24px; border-radius: 50%; background: #9DA3B2"></span>
+      <span id="n-moon" class="count"></span>
+    </button>
+    <button id="tool-orbit" class="tool" type="button" aria-label="Moon on orbit: reflects light and shifts its color as it moves. Drag onto the field." title="Moon on orbit: reflects light, shifting its color as it moves">
+      <span style="width: 30px; height: 30px; box-sizing: border-box; border-radius: 50%; border: 1px dashed #5A6178; display: flex; align-items: flex-start; justify-content: center">
+        <span style="width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: #9DA3B2"></span>
+      </span>
+      <span id="n-orbit" class="count"></span>
+    </button>
+    <button id="tool-bh" class="tool" type="button" aria-label="Black hole: bends light; light climbing out of its pull turns redder. Drag onto the field." title="Black hole: bends light; light climbing out of its pull turns redder">
+      <span style="width: 24px; height: 24px; border-radius: 50%; background: #000000; box-shadow: 0 0 0 1.5px rgba(255,255,255,0.35)"></span>
+      <span id="n-bh" class="count"></span>
+    </button>
+    <button id="tool-planet" class="tool" type="button" aria-label="Planet: blocks and reflects light. Drag onto the field." title="Planet: blocks and reflects light">
+      <span style="width: 32px; height: 32px; border-radius: 50%; background: #141A2B; box-shadow: inset 0 0 0 1.5px #3A4462"></span>
+      <span id="n-planet" class="count"></span>
+    </button>
+    <button id="tool-void" class="tool" type="button" aria-label="Void: stretches light redder. Drag onto the field." title="Void: stretches light redder">
+      <svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#8E9AC4" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="15" cy="15" r="12" stroke-dasharray="2 3"></circle><path d="M15 9v-4M15 21v4M9 15h-4M21 15h4"></path></svg>
+      <span id="n-void" class="count"></span>
+    </button>
+    <button id="tool-dust" class="tool" type="button" aria-label="Dust cloud: dims light and makes it look redder. Drag onto the field." title="Dust cloud: dims light and makes it look redder">
+      <span style="width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(circle, rgba(150,105,70,0.9) 0%, rgba(150,105,70,0.35) 55%, rgba(150,105,70,0) 75%)"></span>
+      <span id="n-dust" class="count"></span>
+    </button>
+    <div class="divider"></div>
+    <button id="pause" class="icon-btn" type="button" aria-label="Pause orbits">
+      <svg id="icoPlay" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4l14 8-14 8z"></path></svg>
+      <svg id="icoPause" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 5v14M16 5v14"></path></svg>
+    </button>
+    <button id="reset" class="icon-btn" type="button" aria-label="Reset">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>
+    </button>
+    <div class="divider"></div>
+    <canvas id="spec" role="img" aria-label="Spectrum at the cursor, or at the receiver when the cursor is away" style="width: 820px; height: 64px; display: block"></canvas>
+  </div>
+</div>
+
+<script>
+// ---- SIM START (pure simulation + level data; no DOM)
+const W = 1440, H = 900;
+const RS = 22;           // black hole scale; capture radius = 1.5 RS
+const LIGHT_C = 1500;    // light speed for Doppler
+const HUB = 0.00025;     // void stretch per px
+const DK = 0.006;        // dust optical depth per px
+const DS = 5;            // ray step, px
+const ORBIT = 90;        // orbiting moon: orbit radius
+const SPIN = 0.6;        // orbiting moon: rad/s
+const REFLECT = 0.8;     // brightness kept per bounce
+const MAX_BOUNCE = 8;
+const P_REQ = 1.5;         // in-window light the receiver needs to charge at full speed (rays at 1800)
+const TOOL_R = { moon: 44, orbit: 24, bh: 0, planet: 80, void: 120, dust: 95 };
+const TYPES = ['moon', 'orbit', 'bh', 'planet', 'void', 'dust'];
+
+const LEVELS = [
+  {
+    name: 'Moonlight',
+    tip: 'New: the moon. It reflects light. The closer it sits to the star, the brighter its reflection.',
+    src: { x: 240, y: 450, l: 530 },
+    planets: [{ x: 720, y: 450, r: 110 }],
+    recv: { x: 1180, y: 450, r: 34, lo: 520, hi: 540 },
+    counts: { moon: 1 }
+  },
+  {
+    name: 'Gravity Well',
+    tip: 'New: the black hole. It bends light, and light climbing out of its pull comes out redder.',
+    src: { x: 330, y: 450, l: 530 },
+    planets: [],
+    recv: { x: 1180, y: 450, r: 34, lo: 560, hi: 575 },
+    counts: { bh: 1 }
+  },
+  {
+    name: 'Behind the Planet',
+    tip: 'Get light around the planet and make it redder.',
+    src: { x: 260, y: 450, l: 530 },
+    planets: [{ x: 760, y: 450, r: 120 }],
+    recv: { x: 1200, y: 450, r: 34, lo: 560, hi: 575 },
+    counts: { moon: 1, bh: 1 }
+  }
+];
+const PLAYGROUND = {
+  name: 'Playground', sandbox: true,
+  tip: 'Every object, no goal. Drag the star too; drop objects on the tray to remove them.',
+  src: { x: 360, y: 450, l: 530 },
+  planets: [],
+  recv: null,
+  counts: { moon: Infinity, orbit: Infinity, bh: Infinity, planet: Infinity, void: Infinity, dust: Infinity }
+};
+
+function hist(arr) {
+  const h = new Float32Array(451); let mx = 0, pk = -1;
+  for (let i = 0; i < arr.length; i += 2) {
+    const b = Math.round(arr[i]) - 350;
+    if (b >= 0 && b <= 450) { h[b] += 0.15 + arr[i + 1]; if (h[b] > mx) { mx = h[b]; pk = b + 350; } }
+  }
+  return { h: h, mx: mx, pk: pk, n: arr.length };
+}
+
+class Sim {
+  constructor(level) { this.level = level; this.reset(); }
+  reset() {
+    const L = this.level;
+    this.t = 0; this.paused = false; this.charge = 0; this.solved = false; this.nid = 0;
+    this.src = Object.assign({}, L.src);
+    this.planets = L.planets.map((p) => Object.assign({}, p));
+    this.recv = L.recv ? Object.assign({}, L.recv) : null;
+    this.counts = {};
+    for (const k of TYPES) this.counts[k] = L.counts[k] || 0;
+    this.objs = [];
+  }
+  add(type, x, y) {
+    if (this.counts[type] <= 0) return null;
+    const o = { id: ++this.nid, type: type, x: x, y: y, phase: -Math.PI / 2, r: TOOL_R[type] };
+    this.objs.push(o); this.counts[type]--;
+    return o;
+  }
+  remove(o) { this.objs = this.objs.filter((x) => x !== o); this.counts[o.type]++; }
+  moonPos(o) {
+    const th = o.phase + SPIN * this.t;
+    o.mx = o.x + ORBIT * Math.cos(th); o.my = o.y + ORBIT * Math.sin(th);
+    o.vx = -ORBIT * SPIN * Math.sin(th); o.vy = ORBIT * SPIN * Math.cos(th);
+  }
+  // Trace N rays from the star. Returns drawable segments and what the receiver / probe saw.
+  trace(N, probe) {
+    const src = this.src, rc = this.recv;
+    const bhs = [], voids = [], dusts = [], orbits = [], refl = [];
+    for (const p of this.planets) refl.push({ x: p.x, y: p.y, r: p.r, vx: 0, vy: 0 });
+    for (const o of this.objs) {
+      if (o.type === 'bh') bhs.push(o);
+      else if (o.type === 'void') voids.push(o);
+      else if (o.type === 'dust') dusts.push(o);
+      else if (o.type === 'orbit') { this.moonPos(o); orbits.push(o); refl.push({ x: o.mx, y: o.my, r: o.r, vx: o.vx, vy: o.vy }); }
+      else refl.push({ x: o.x, y: o.y, r: o.r, vx: 0, vy: 0 });
+    }
+    let s0 = 0;
+    for (const b of bhs) s0 += RS / Math.max(Math.hypot(src.x - b.x, src.y - b.y), RS * 1.5);
+    const linf0 = src.l / Math.sqrt(Math.max(0.04, 1 - s0));
+    const buckets = new Map();
+    const add = (k, a, b, c, d) => { let arr = buckets.get(k); if (!arr) { arr = []; buckets.set(k, arr); } arr.push(a, b, c, d); };
+    const hl = [], bounce = [], hits = [], psamp = [];
+    for (let i = 0; i < N; i++) {
+      const ang = (i + 0.5) / N * Math.PI * 2;
+      let dx = Math.cos(ang), dy = Math.sin(ang);
+      let x = src.x + dx * 12, y = src.y + dy * 12;
+      let linf = linf0, tau = 0, amp = 1, nb = 0, lx = x, ly = y, lastKey = -1, since = 0, end = 0;
+      const segs = [];
+      for (let st = 0; st < 800; st++) {
+        let sum = 0, near = false, dead = false;
+        for (const b of bhs) {
+          const ex = b.x - x, ey = b.y - y, r2 = ex * ex + ey * ey, r = Math.sqrt(r2);
+          if (r < RS * 1.5) { dead = true; break; }
+          const a = RS / r2 * DS;
+          dx += ex / r * a; dy += ey / r * a;
+          sum += RS / r;
+          if (r < RS * 7) near = true;
+        }
+        if (dead) { end = 2; if (lastKey >= 0) { add(lastKey, lx, ly, x, y); segs.push(lx, ly, x, y, lastKey); } break; }
+        const n = Math.hypot(dx, dy); dx /= n; dy /= n;
+        x += dx * DS; y += dy * DS;
+        let ev = false;
+        for (const v of voids) { const ex = x - v.x, ey = y - v.y; if (ex * ex + ey * ey < v.r * v.r) linf *= 1 + HUB * DS; }
+        for (const d of dusts) { const ex = x - d.x, ey = y - d.y; if (ex * ex + ey * ey < d.r * d.r) tau += DK * DS; }
+        for (const m of refl) {
+          const ex = x - m.x, ey = y - m.y, r2 = ex * ex + ey * ey;
+          if (r2 < m.r * m.r) {
+            const r = Math.sqrt(r2) || 1, nx = ex / r, ny = ey / r, dot = dx * nx + dy * ny;
+            if (dot < 0) {
+              const ox = dx - 2 * dot * nx, oy = dy - 2 * dot * ny;
+              if (m.vx || m.vy) linf *= 1 + (m.vx * (dx - ox) + m.vy * (dy - oy)) / LIGHT_C;
+              dx = ox; dy = oy; x = m.x + nx * m.r; y = m.y + ny * m.r;
+              amp *= REFLECT; nb++; ev = true;
+            }
+          }
+        }
+        const g = Math.sqrt(Math.max(0.04, 1 - sum));
+        const lt = linf * g;                         // true local wavelength
+        const la = lt + 55 * (1 - Math.exp(-tau));   // apparent color after dust reddening
+        const w = amp * Math.exp(-1.3 * tau);        // brightness
+        const lev = Math.max(0, Math.min(7, Math.round(7 * w)));
+        const key = Math.round(la) * 8 + lev;
+        let stop = 0;
+        if (nb > MAX_BOUNCE || w < 0.04) stop = 5;
+        if (rc) { const ex = x - rc.x, ey = y - rc.y; if (ex * ex + ey * ey < rc.r * rc.r) stop = 1; }
+        if (x < -20 || y < -20 || x > W + 20 || y > H + 20) stop = 4;
+        if (probe) { const ex = x - probe.x, ey = y - probe.y; if (ex * ex + ey * ey < 256) psamp.push(lt, w); }
+        since++;
+        if (stop || ev || key !== lastKey || (near && since >= 2) || since >= 24) {
+          const k = lastKey < 0 ? key : lastKey;
+          add(k, lx, ly, x, y); segs.push(lx, ly, x, y, k);
+          lx = x; ly = y; lastKey = key; since = 0;
+        }
+        if (ev) bounce.push(x, y, key);
+        if (stop) { if (stop === 1) hits.push(lt, w); end = stop; break; }
+      }
+      if (end === 1) hl.push(segs);
+    }
+    return { N: N, buckets: buckets, hl: hl, bounce: bounce, hits: hits, psamp: psamp, bhs: bhs, voids: voids, dusts: dusts, orbits: orbits };
+  }
+  // What the receiver sees: light power overall and inside the window (in rays at 1800).
+  evaluate(tr) {
+    const rc = this.recv;
+    if (!rc) return null;
+    const sc = 1800 / tr.N;
+    let lit = 0, pin = 0, pall = 0, wsum = 0, lsum = 0;
+    for (let i = 0; i < tr.hits.length; i += 2) {
+      const l = tr.hits[i], w = tr.hits[i + 1];
+      lit++; pall += w * sc; wsum += w; lsum += l * w;
+      if (l >= rc.lo && l <= rc.hi) pin += w * sc;
+    }
+    return { lit: lit, pin: pin, pall: pall, mean: wsum > 0 ? Math.round(lsum / wsum) : 0 };
+  }
+  step(dt, tr) {
+    const ev = this.evaluate(tr);
+    if (!ev) return null;
+    if (!this.paused) {
+      if (ev.pin > 0) this.charge = Math.min(1.2, this.charge + dt * Math.min(1, ev.pin / P_REQ));
+      else this.charge = Math.max(0, this.charge - dt * 0.5);
+    }
+    if (this.charge >= 1.2) this.solved = true;
+    return ev;
+  }
+}
+// ---- SIM END
+
+// ---- UI
+const $ = (id) => document.getElementById(id);
+const Q = new URLSearchParams(location.search);
+const N = Math.max(400, Math.min(4000, parseInt(Q.get('rays'), 10) || 1800));
+
+function wl(w) {
+  let r = 0, g = 0, b = 0;
+  const ww = Math.max(380, Math.min(780, w));
+  if (ww < 440) { r = -(ww - 440) / 60; b = 1; }
+  else if (ww < 490) { g = (ww - 440) / 50; b = 1; }
+  else if (ww < 510) { g = 1; b = -(ww - 510) / 20; }
+  else if (ww < 580) { r = (ww - 510) / 70; g = 1; }
+  else if (ww < 645) { r = 1; g = -(ww - 645) / 65; }
+  else { r = 1; }
+  let f;
+  if (w < 380) f = 0.16; else if (w < 420) f = 0.3 + 0.7 * (w - 380) / 40;
+  else if (w <= 700) f = 1; else if (w <= 780) f = 0.3 + 0.7 * (780 - w) / 80; else f = 0.16;
+  const c = (v) => Math.round(255 * Math.pow(v * f, 0.8));
+  return [c(r), c(g), c(b)];
+}
+const COL = [];
+for (let nm = 0; nm <= 1000; nm++) COL.push(wl(nm));
+const col = (nm) => COL[Math.max(0, Math.min(1000, Math.round(nm)))];
+const rgba = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')';
+
+const STARS = [];
+{ let s = 7; const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+  for (let i = 0; i < 170; i++) STARS.push(rnd() * W, rnd() * H, rnd() < 0.85 ? 1 : 1.6, 0.2 + rnd() * 0.5); }
+
+const store = {
+  get() { try { return parseInt(localStorage.getItem('lightpath.reached.v2'), 10) || 1; } catch (e) { return 1; } },
+  set(v) { try { localStorage.setItem('lightpath.reached.v2', String(v)); } catch (e) {} }
+};
+let reached = store.get();
+let li = 0, cur = LEVELS[0], sim = null, probe = null, drag = null, lastStatus = null, lastHot = null;
+const STAR = { type: 'star' };
+
+const cv = $('field'), sp = $('spec'), bar = $('bar');
+const DPR = Math.min(2, window.devicePixelRatio || 1);
+cv.width = W * DPR; cv.height = H * DPR; sp.width = 820 * DPR; sp.height = 64 * DPR;
+const ctx = cv.getContext('2d'), sctx = sp.getContext('2d');
+
+const dots = LEVELS.map((L, i) => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'dot'; b.textContent = String(i + 1);
+  b.title = L.name; b.setAttribute('aria-label', 'Level ' + (i + 1) + ': ' + L.name);
+  b.addEventListener('click', () => load(i));
+  $('dots').appendChild(b);
+  return b;
+});
+const playBtn = document.createElement('button');
+playBtn.type = 'button'; playBtn.className = 'dot pill'; playBtn.textContent = 'Playground';
+playBtn.addEventListener('click', () => load(-1));
+$('dots').appendChild(playBtn);
+
+function load(i) {
+  li = i; cur = i < 0 ? PLAYGROUND : LEVELS[i];
+  sim = new Sim(cur); drag = null; probe = null; lastStatus = null; lastHot = null;
+  if (i >= 0) { reached = Math.max(reached, i + 1); store.set(reached); }
+  const st = $('stage'); st.classList.remove('fade'); void st.offsetWidth; st.classList.add('fade');
+  render();
+}
+
+function render() {
+  const S = sim, sb = !!cur.sandbox;
+  $('lvlLabel').textContent = sb ? 'SANDBOX' : 'LEVEL ' + (li + 1) + ' OF ' + LEVELS.length;
+  $('lvlName').textContent = cur.name;
+  $('goal').style.display = sb ? 'none' : 'block';
+  if (!sb) $('goal').textContent = 'The star emits ' + cur.src.l + ' nm. Get enough light into the receiver at ' + cur.recv.lo + '–' + cur.recv.hi + ' nm.';
+  $('colorRow').style.display = sb ? 'flex' : 'none';
+  $('colorIn').value = S.src.l; $('colorVal').textContent = S.src.l + ' nm';
+  $('tip').textContent = cur.tip + ' Hover anywhere to read the light there.';
+  for (const k of TYPES) {
+    const b = $('tool-' + k), n = S.counts[k];
+    b.style.display = (cur.counts[k] || 0) > 0 ? 'flex' : 'none';
+    b.style.opacity = n > 0 ? 1 : 0.4;
+    $('n-' + k).textContent = Number.isFinite(n) ? String(n) : '';
+  }
+  $('pause').style.display = (cur.counts.orbit || 0) > 0 ? 'flex' : 'none';
+  $('icoPlay').style.display = S.paused ? 'block' : 'none';
+  $('icoPause').style.display = S.paused ? 'none' : 'block';
+  $('pause').setAttribute('aria-label', S.paused ? 'Resume orbits' : 'Pause orbits');
+  const last = li === LEVELS.length - 1;
+  $('solved').style.display = S.solved ? 'flex' : 'none';
+  $('solvedText').textContent = last ? 'All levels complete' : 'Level complete';
+  $('next').textContent = last ? 'Open the playground →' : 'Next level →';
+  dots.forEach((b, i) => { b.disabled = i + 1 > reached; b.setAttribute('aria-current', i === li ? 'true' : 'false'); });
+  playBtn.setAttribute('aria-current', li < 0 ? 'true' : 'false');
+}
+
+function setStatus(msg, hot) {
+  if (msg === lastStatus && hot === lastHot) return;
+  lastStatus = msg; lastHot = hot;
+  $('status').textContent = msg;
+  $('status').style.color = hot ? '#F1F2F6' : '#9AA1B5';
+}
+
+function statusFor(ev, rh) {
+  const rc = sim.recv;
+  if (sim.solved) return 'Solved.';
+  if (ev.lit === 0) return 'No light reaches the receiver.';
+  if (ev.pin > 0) {
+    if (ev.pin < P_REQ) return 'Right color, but faint: ' + Math.round(100 * ev.pin / P_REQ) + '% of the light it needs.';
+    return 'Light in the window. Hold it there.';
+  }
+  const pk = rh.pk > 0 ? rh.pk : ev.mean;
+  return 'Light arrives at ' + pk + ' nm: too ' + (pk < rc.lo ? 'blue' : 'red') + '. Needs ' + rc.lo + '–' + rc.hi + ' nm.';
+}
+
+// ---- input
+function toCanvas(e) {
+  const r = cv.getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height,
+    inside: e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
+  };
+}
+function overBar(e) {
+  const b = bar.getBoundingClientRect();
+  return e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom;
+}
+function hitTest(p) {
+  const objs = sim.objs;
+  if (cur.sandbox && Math.hypot(p.x - sim.src.x, p.y - sim.src.y) < 24) return STAR;
+  for (let i = objs.length - 1; i >= 0; i--) {
+    const o = objs[i];
+    if (o.type === 'bh' && Math.hypot(p.x - o.x, p.y - o.y) < 36) return o;
+    if (o.type === 'orbit') {
+      sim.moonPos(o);
+      if (Math.hypot(p.x - o.mx, p.y - o.my) < o.r + 10 || Math.hypot(p.x - o.x, p.y - o.y) < 18) return o;
+    }
+  }
+  for (let i = objs.length - 1; i >= 0; i--) {
+    const o = objs[i];
+    if (o.type === 'moon' && Math.hypot(p.x - o.x, p.y - o.y) < o.r + 6) return o;
+    if (o.type === 'planet' && Math.hypot(p.x - o.x, p.y - o.y) < o.r) return o;
+  }
+  for (let i = objs.length - 1; i >= 0; i--) {
+    const o = objs[i];
+    if ((o.type === 'void' || o.type === 'dust') && Math.hypot(p.x - o.x, p.y - o.y) < o.r) return o;
+  }
+  return null;
+}
+for (const k of TYPES) {
+  $('tool-' + k).addEventListener('pointerdown', (e) => {
+    if (sim.counts[k] <= 0) return;
+    e.preventDefault();
+    const p = toCanvas(e);
+    const o = sim.add(k, p.x, p.y);
+    drag = { o: o, ox: 0, oy: 0 }; probe = null;
+    render();
+  });
+}
+cv.addEventListener('pointerdown', (e) => {
+  const p = toCanvas(e);
+  const o = hitTest(p);
+  if (!o) return;
+  e.preventDefault();
+  const at = o === STAR ? sim.src : o;
+  drag = { o: o, ox: at.x - p.x, oy: at.y - p.y }; probe = null;
+});
+window.addEventListener('pointermove', (e) => {
+  const p = toCanvas(e);
+  if (drag) {
+    const nx = p.x + drag.ox, ny = p.y + drag.oy;
+    if (drag.o === STAR) { sim.src.x = Math.max(20, Math.min(W - 20, nx)); sim.src.y = Math.max(20, Math.min(H - 20, ny)); }
+    else { drag.o.x = nx; drag.o.y = ny; }
+    probe = null; cv.style.cursor = 'grabbing';
+    return;
+  }
+  probe = (p.inside && !overBar(e)) ? { x: p.x, y: p.y } : null;
+  cv.style.cursor = (probe && hitTest(p)) ? 'grab' : 'crosshair';
+});
+const endDrag = (e) => {
+  if (!drag) return;
+  const p = toCanvas(e);
+  if (drag.o !== STAR && (overBar(e) || !p.inside)) sim.remove(drag.o);
+  drag = null;
+  render();
+};
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
+$('pause').addEventListener('click', () => { sim.paused = !sim.paused; render(); });
+$('reset').addEventListener('click', () => { sim.reset(); render(); });
+$('next').addEventListener('click', () => load(li === LEVELS.length - 1 ? -1 : li + 1));
+$('colorIn').addEventListener('input', (e) => { sim.src.l = parseInt(e.target.value, 10); $('colorVal').textContent = sim.src.l + ' nm'; });
+
+// ---- drawing
+function paint(dt) {
+  const S = sim, src = S.src, rc = S.recv;
+  const tr = S.trace(N, probe);
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#04050A'; ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < STARS.length; i += 4) { ctx.fillStyle = 'rgba(205,212,230,' + STARS[i + 3] + ')'; ctx.fillRect(STARS[i], STARS[i + 1], STARS[i + 2], STARS[i + 2]); }
+  for (const v of tr.voids) {
+    ctx.fillStyle = 'rgba(110,125,190,0.05)';
+    ctx.beginPath(); ctx.arc(v.x, v.y, v.r, 0, Math.PI * 2); ctx.fill();
+    ctx.setLineDash([3, 6]); ctx.strokeStyle = 'rgba(150,165,220,0.35)'; ctx.lineWidth = 1;
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  for (const d of tr.dusts) {
+    const gr = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r);
+    gr.addColorStop(0, 'rgba(120,82,55,0.42)'); gr.addColorStop(0.6, 'rgba(120,82,55,0.22)'); gr.addColorStop(1, 'rgba(120,82,55,0)');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.globalCompositeOperation = 'lighter';
+  const base = 0.09 * 1800 / N;
+  const sc = col(src.l);
+  const sg = ctx.createRadialGradient(src.x, src.y, 0, src.x, src.y, 90);
+  sg.addColorStop(0, rgba(sc, 0.55)); sg.addColorStop(1, rgba(sc, 0));
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(src.x, src.y, 90, 0, Math.PI * 2); ctx.fill();
+  ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+  tr.buckets.forEach((arr, key) => {
+    const c = col(Math.floor(key / 8)), lev = key % 8;
+    ctx.strokeStyle = rgba(c, base * lev / 7);
+    ctx.beginPath();
+    for (let i = 0; i < arr.length; i += 4) { ctx.moveTo(arr[i], arr[i + 1]); ctx.lineTo(arr[i + 2], arr[i + 3]); }
+    ctx.stroke();
+  });
+  ctx.lineWidth = 2;
+  for (const segs of tr.hl) {
+    for (let i = 0; i < segs.length; i += 5) {
+      const key = segs[i + 4], c = col(Math.floor(key / 8)), lev = key % 8;
+      ctx.strokeStyle = rgba(c, 0.25 + 0.6 * lev / 7);
+      ctx.beginPath(); ctx.moveTo(segs[i], segs[i + 1]); ctx.lineTo(segs[i + 2], segs[i + 3]); ctx.stroke();
+    }
+  }
+
+  ctx.globalCompositeOperation = 'source-over';
+  const body = (x, y, r, fill, edge) => {
+    ctx.fillStyle = fill; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = edge; ctx.lineWidth = 1; ctx.stroke();
+  };
+  for (const p of S.planets) body(p.x, p.y, p.r, '#0E1322', '#1F2740');
+  for (const o of S.objs) {
+    if (o.type === 'planet') body(o.x, o.y, o.r, '#0E1322', '#1F2740');
+    else if (o.type === 'moon') body(o.x, o.y, o.r, '#3A3F4C', 'rgba(220,226,240,0.22)');
+  }
+  for (const m of tr.orbits) {
+    ctx.setLineDash([3, 6]); ctx.strokeStyle = 'rgba(170,180,205,0.22)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(m.x, m.y, ORBIT, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(170,180,205,0.35)'; ctx.beginPath(); ctx.arc(m.x, m.y, 2.5, 0, Math.PI * 2); ctx.fill();
+    body(m.mx, m.my, m.r, '#3A3F4C', 'rgba(220,226,240,0.22)');
+    const spd = Math.hypot(m.vx, m.vy), ux = m.vx / spd, uy = m.vy / spd;
+    const ax = m.mx + ux * (m.r + 16), ay = m.my + uy * (m.r + 16);
+    ctx.strokeStyle = 'rgba(200,210,230,0.6)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(m.mx + ux * (m.r + 4), m.my + uy * (m.r + 4)); ctx.lineTo(ax, ay); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax - ux * 6 - uy * 4, ay - uy * 6 + ux * 4); ctx.lineTo(ax - ux * 6 + uy * 4, ay - uy * 6 - ux * 4); ctx.closePath();
+    ctx.fillStyle = 'rgba(200,210,230,0.6)'; ctx.fill();
+  }
+  for (const b of tr.bhs) {
+    ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(b.x, b.y, RS * 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  const da = 0.3 * 1800 / N;
+  for (let i = 0; i < tr.bounce.length; i += 3) {
+    const key = tr.bounce[i + 2], c = col(Math.floor(key / 8)), lev = key % 8;
+    ctx.fillStyle = rgba(c, da * lev / 7);
+    ctx.fillRect(tr.bounce[i] - 1.5, tr.bounce[i + 1] - 1.5, 3, 3);
+  }
+
+  ctx.globalCompositeOperation = 'source-over';
+  let ev = null;
+  if (rc) {
+    const wasSolved = S.solved;
+    ev = S.step(dt, tr);
+    if (S.solved && !wasSolved) { reached = Math.max(reached, Math.min(LEVELS.length, li + 2)); store.set(reached); render(); }
+    ctx.fillStyle = '#080B14'; ctx.beginPath(); ctx.arc(rc.x, rc.y, rc.r, 0, Math.PI * 2); ctx.fill();
+    if (ev.lit > 0) {
+      const c = col(ev.mean), a = Math.min(1, 0.25 + ev.pall / P_REQ);
+      const rg = ctx.createRadialGradient(rc.x, rc.y, 0, rc.x, rc.y, rc.r);
+      rg.addColorStop(0, rgba(c, 0.95 * a)); rg.addColorStop(1, rgba(c, 0.1 * a));
+      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(rc.x, rc.y, rc.r - 4, 0, Math.PI * 2); ctx.fill();
+    }
+    const tc = col((rc.lo + rc.hi) / 2);
+    ctx.strokeStyle = rgba(tc, S.solved ? 1 : 0.5);
+    ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(rc.x, rc.y, rc.r + 5, 0, Math.PI * 2); ctx.stroke();
+    if (S.charge > 0) {
+      ctx.strokeStyle = '#F1F2F6'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(rc.x, rc.y, rc.r + 11, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * S.charge / 1.2); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(src.x, src.y, 7, 0, Math.PI * 2); ctx.fill();
+  if (cur.sandbox) { ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(src.x, src.y, 14, 0, Math.PI * 2); ctx.stroke(); }
+
+  const ph = probe ? hist(tr.psamp) : null;
+  if (probe) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(probe.x, probe.y, 16, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(probe.x - 22, probe.y); ctx.lineTo(probe.x - 18, probe.y); ctx.moveTo(probe.x + 18, probe.y); ctx.lineTo(probe.x + 22, probe.y);
+    ctx.moveTo(probe.x, probe.y - 22); ctx.lineTo(probe.x, probe.y - 18); ctx.moveTo(probe.x, probe.y + 18); ctx.lineTo(probe.x, probe.y + 22);
+    ctx.stroke();
+    if (ph.pk > 0) {
+      ctx.font = '500 12px "JetBrains Mono", monospace'; ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.textAlign = 'left';
+      ctx.fillText(ph.pk + ' nm', probe.x + 24, probe.y - 12);
+    }
+  }
+  const rh = hist(tr.hits);
+  paintSpec(probe ? ph : (rc ? rh : null), rc, !!probe);
+  if (rc) setStatus(statusFor(ev, rh), S.solved || ev.pin >= P_REQ);
+  else setStatus('', false);
+}
+
+function paintSpec(hd, rc, isProbe) {
+  const c = sctx, SW = 820;
+  c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  c.clearRect(0, 0, SW, 64);
+  const L = 8, R = SW - 84;
+  const X = (nm) => L + (nm - 350) / 450 * (R - L);
+  for (let px = L; px < R; px++) {
+    const k = col(350 + (px - L) / (R - L) * 450);
+    c.fillStyle = 'rgb(' + k[0] + ',' + k[1] + ',' + k[2] + ')';
+    c.fillRect(px, 34, 1, 10);
+  }
+  if (rc) {
+    c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 1.5;
+    c.strokeRect(X(rc.lo) - 1, 30, X(rc.hi) - X(rc.lo) + 2, 18);
+  }
+  c.font = '500 10px "JetBrains Mono", monospace'; c.fillStyle = '#8C93A8'; c.textAlign = 'center';
+  [400, 500, 600, 700].forEach((nm) => c.fillText(String(nm), X(nm), 60));
+  c.textAlign = 'left';
+  if (hd && hd.mx > 0) {
+    c.lineWidth = 2;
+    for (let b = 0; b <= 450; b++) {
+      const v = hd.h[b]; if (!v) continue;
+      const nm = b + 350, k = col(nm), hh = 3 + 24 * Math.sqrt(v / hd.mx);
+      c.strokeStyle = 'rgb(' + Math.min(255, k[0] + 60) + ',' + Math.min(255, k[1] + 60) + ',' + Math.min(255, k[2] + 60) + ')';
+      c.beginPath(); c.moveTo(X(nm), 31); c.lineTo(X(nm), 31 - hh); c.stroke();
+    }
+  }
+  c.font = '500 14px "JetBrains Mono", monospace';
+  c.fillStyle = hd && hd.pk > 0 ? '#F1F2F6' : '#5C6378';
+  c.fillText(hd && hd.pk > 0 ? hd.pk + ' nm' : '— nm', R + 14, 30);
+  c.beginPath(); c.lineWidth = 1.2; c.strokeStyle = '#8C93A8';
+  c.arc(R + 20, 48, 5, 0, Math.PI * 2); c.stroke();
+  if (!isProbe) { c.beginPath(); c.arc(R + 20, 48, 2, 0, Math.PI * 2); c.fillStyle = '#8C93A8'; c.fill(); }
+}
+
+// ---- boot
+const stage = $('stage');
+const fit = () => {
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  stage.style.transform = 'translate(' + (innerWidth - W * s) / 2 + 'px,' + (innerHeight - H * s) / 2 + 'px) scale(' + s + ')';
+};
+addEventListener('resize', fit);
+fit();
+{
+  const q = Q.get('level');
+  if (q === 'play' || q === 'playground') load(-1);
+  else load(Math.max(1, Math.min(LEVELS.length, parseInt(q, 10) || 1)) - 1);
+}
+let lastTs = 0;
+function frame(ts) {
+  const now = ts / 1000, dt = lastTs ? Math.min(0.05, now - lastTs) : 0;
+  lastTs = now;
+  if (!sim.paused) sim.t += dt;
+  try { paint(dt); } catch (err) { console.error(err); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
